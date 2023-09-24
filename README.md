@@ -16,6 +16,11 @@ The `powers of tau` file is used when generating zkey, so download one.
 $ wget https://hermez.s3-eu-west-1.amazonaws.com/powersOfTau28_hez_final_19.ptau
 ```
 
+Make sure to install node modules.
+```
+$ npm install
+```
+
 ## Build
 ```
 $ mkdir build
