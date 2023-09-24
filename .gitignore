@@ -1,0 +1,11 @@
+# Build
+artifacts
+build
+cache
+node_modules
+contracts/groth16.sol
+
+# powers of tau
+*.ptau
+
+*.swp
