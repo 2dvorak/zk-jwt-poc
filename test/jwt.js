@@ -2,13 +2,10 @@ const path = require("path");
 const fs = require("fs");
 const chai = require("chai");
 const assert = chai.assert;
-
-
 const snark = require("snarkjs");
 const ff = require("ffjavascript");
 
 const hardhat = require("hardhat");
-//const { decodeProtectedHeader } = require("jose");
 
 function arrayChunk(array, chunk_size) {
     return Array(Math.ceil(array.length / chunk_size)).fill().map((_, index) => index * chunk_size).map(begin => array.slice(begin, begin + chunk_size));
