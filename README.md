@@ -3,8 +3,8 @@
 Verify JWT (OIDC id\_token) in smart contract, however privacy preserved with the aids of ZK
 
 ## Prerequisites
-- Node.js
-- Circom
+- [Node.js](https://nodejs.org/en/download) (tested with v16.19.1)
+- [Circom](https://docs.circom.io/getting-started/installation/)
 
 Also, we need `npx`.
 ```
