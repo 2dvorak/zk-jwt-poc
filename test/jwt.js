@@ -3,7 +3,6 @@ const fs = require("fs");
 const chai = require("chai");
 const assert = chai.assert;
 const snark = require("snarkjs");
-const ff = require("ffjavascript");
 
 const hardhat = require("hardhat");
 
@@ -17,6 +16,12 @@ function buffer2BitArray(b) {
 
 function bitArray2Buffer(a) {
     return Buffer.from(arrayChunk(a, 8).map(byte => parseInt(byte.join(''), 2)))
+}
+
+function printProgress(progress) {
+    process.stdout.clearLine();
+    process.stdout.cursorTo(0);
+    process.stdout.write(progress);
 }
 
 async function jwtProof(){
@@ -49,34 +54,32 @@ async function jwtProof(){
         inputs[claim + "Offset"] = claimOffset + fieldNameLength;
     })
 
-    // Initialize snarkjs
-    const curve = await ff.buildBn128();
     const zkey_final = {type: "mem"};
     const wtns = {type: "mem"};
 
     timestamps.push(new Date());
 
     // Generate zkey
-    process.stdout.write("Generating zkey... (takes about a minute)");
+    printProgress("Generating zkey... (takes about a minute)");
     await snark.zKey.newZKey(path.join("build", "jwt.r1cs"), "powersOfTau28_hez_final_19.ptau", zkey_final);
     const vKey = await snark.zKey.exportVerificationKey(zkey_final);
 
     timestamps.push(new Date());
 
     // Calculate witness
-    process.stdout.write("\rCalculating zkey...");
+    printProgress("Calculating zkey...");
     await snark.wtns.calculate(inputs, path.join("build", "jwt_js", "jwt.wasm"), wtns);
 
     timestamps.push(new Date());
 
     // Generate proof
-    process.stdout.write("\rGenerating proof...");
+    printProgress("Generating proof...");
     const {proof: proof, publicSignals: publicSignals} = await snark.groth16.prove(zkey_final, wtns);
 
     timestamps.push(new Date());
 
     // Check if proof is valid
-    process.stdout.write("\rVerifying proof...");
+    printProgress("Verifying proof...");
     let res = await snark.groth16.verify(vKey, publicSignals, proof);
     assert(res == true);
 
@@ -103,7 +106,7 @@ async function jwtProof(){
     timestamps.push(new Date());
 
     // Deploy JWT verifier's dependency contracts (RSA verifier + groth16 verifier)
-    process.stdout.write("\rDeploying contracts...");
+    printProgress("Deploying contracts...");
     const ZKFactory = await hardhat.ethers.getContractFactory("Groth16Verifier");
     zkContract = await ZKFactory.deploy();
 
@@ -134,8 +137,8 @@ async function jwtProof(){
 
     timestamps.push(new Date());
 
-    process.stdout.write("\rCreating contract calls...");
     // Verify JWT using ZK
+    printProgress("Creating contract calls...");
     let result = await verifierContract.verify(sig, proofA, proofB, proofC, publicSignals);
 
     timestamps.push(new Date());
@@ -154,10 +157,11 @@ async function jwtProof(){
     timestamps.push(new Date());
 
     // Print timestamps
-    process.stdout.write("\rSuccessfully verified JWT!\nSummary:\n");
+    printProgress("Successfully verified JWT!\nSummary:\n");
     for (let i = 0; i < timestamps.length - 1; i++) {
         console.log(timestamps_labels[i] + " time: ", timestamps[i + 1] - timestamps[i]);
     }
+    console.log("zkContract size:", zkContract.deployTransaction.data.length /2);
 
     return result;
 }

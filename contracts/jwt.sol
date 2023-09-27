@@ -4,15 +4,16 @@ pragma solidity ^0.8.0;
 import "./izkverify.sol";
 import "./rsa.sol";
 import "hardhat/console.sol";
+import "./JsmnSolLib.sol";
 
 contract JWT {
 
     uint public constant NUMBER_OF_CLAIMS = 5;
     string[] public CLAIM_NAMES = ["iss", "nonce", "aud", "iat", "exp"];
-    uint public PUB_SIGNAL_CLAIMS_LENGTH = 34 + 8 + 32 + 10 + 10;
-    uint public PUB_SIGNAL_JWT_HASH_LENGTH = 256;
-    uint public PUB_SIGNAL_SUB_HASH_LENGTH = 1;
-    uint public PUB_SIGNAL_LENGTH = PUB_SIGNAL_JWT_HASH_LENGTH + PUB_SIGNAL_SUB_HASH_LENGTH + PUB_SIGNAL_CLAIMS_LENGTH;
+    uint public constant PUB_SIGNAL_CLAIMS_LENGTH = 34 + 8 + 32 + 10 + 10;
+    uint public constant PUB_SIGNAL_JWT_HASH_LENGTH = 2;
+    uint public constant PUB_SIGNAL_SUB_HASH_LENGTH = 1;
+    uint public constant PUB_SIGNAL_LENGTH = PUB_SIGNAL_JWT_HASH_LENGTH + PUB_SIGNAL_SUB_HASH_LENGTH + PUB_SIGNAL_CLAIMS_LENGTH;
     address public zkVerify;
     mapping (string => bytes) public claims;
     mapping (string => ClaimInfo) public claimInfo;
@@ -21,7 +22,7 @@ contract JWT {
         uint offset;
         uint len;
     }
-    
+
     constructor(address _zkVerify, string[] memory _claimNames, bytes[] memory _claimValues, uint[] memory _claimOffsets) {
         zkVerify = _zkVerify;
         assert(_claimNames.length == NUMBER_OF_CLAIMS);
@@ -38,12 +39,12 @@ contract JWT {
     }
 
     // Dummy function to measure performance of ZK proof verification
-    function returnTrue(bytes calldata, uint[2] calldata, uint[2][2] calldata, uint[2] calldata, uint[351] memory) public pure returns (bool) {
+    function returnTrue(bytes calldata, uint[2] calldata, uint[2][2] calldata, uint[2] calldata, uint[PUB_SIGNAL_LENGTH] memory) public pure returns (bool) {
         return true;
     }
 
     // Dummy function to measure performance of ZK proof verification
-    function rsaVerify(bytes calldata sig, uint[2] calldata, uint[2][2] calldata, uint[2] calldata, uint[351] memory _pubSignals) public view returns (bool) {
+    function rsaVerify(bytes calldata sig, uint[2] calldata, uint[2][2] calldata, uint[2] calldata, uint[PUB_SIGNAL_LENGTH] memory _pubSignals) public view returns (bool) {
         bytes32 hash = extractHashFromPubSignal(_pubSignals);
 
         bytes memory n =    hex"b11e042ac1890495b395065fc7e033e488328563a8e1d7846373c069d13d9234"
@@ -70,7 +71,7 @@ contract JWT {
     // SHA256(jwt) + Poseidon(sub) + iss + nonce + aud + iat + exp
     // bit array     one uint        byte array
     // 256           1               34    8       32    10    10
-    function verify(bytes memory sig, uint[2] calldata _pA, uint[2][2] calldata _pB, uint[2] calldata _pC, uint[351] memory _pubSignals) public view returns (bool) {
+    function verify(bytes memory sig, uint[2] calldata _pA, uint[2][2] calldata _pB, uint[2] calldata _pC, uint[PUB_SIGNAL_LENGTH] memory _pubSignals) public view returns (bool) {
         // 1. verify the ZK proof
         require(Verifier(zkVerify).verifyProof(_pA, _pB, _pC, _pubSignals), "ZK verify failed");
 
@@ -118,33 +119,17 @@ contract JWT {
         }
     }
 
-    function extractClaimBytesFromPubSignal(uint[351] memory uintArray) public view returns (bytes memory) {
+    function extractClaimBytesFromPubSignal(uint[PUB_SIGNAL_LENGTH] memory uintArray) public pure returns (bytes memory) {
         bytes memory result = new bytes(PUB_SIGNAL_CLAIMS_LENGTH); // 32 bytes per uint
 
         for (uint256 i = 0; i < PUB_SIGNAL_CLAIMS_LENGTH; i++) {
-            result[i] = bytes1(uint8(uintArray[257 + i]));
+            result[i] = bytes1(uint8(uintArray[PUB_SIGNAL_JWT_HASH_LENGTH + PUB_SIGNAL_SUB_HASH_LENGTH + i]));
         }
-
         return result;
     }
 
-    function extractHashFromPubSignal(uint[351] memory bits) public pure returns (bytes32) {
+    function extractHashFromPubSignal(uint[PUB_SIGNAL_LENGTH] memory bits) public pure returns (bytes32) {
 
-        bytes memory byteArray = new bytes(32);
-
-        for (uint i = 0; i < 256; i += 8) {
-            uint8 byteValue = 0;
-            for (uint8 j = 0; j < 8; j++) {
-                byteValue |= uint8(bits[i + 8 - j - 1] & 1) << j;
-            }
-            byteArray[i / 8] = bytes1(byteValue);
-        }
-
-        bytes32 hash;
-        assembly {
-            hash := mload(add(byteArray, 32))
-        }
-
-        return hash;
+        return bytes32(uint256 (uint128 (bits[0])) << 128 | uint128 (bits[1]));
     }
 }

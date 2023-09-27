@@ -42,7 +42,7 @@ template ArraySlice(n, m) {
             eq[j][i].in[0] <== j;
             eq[j][i].in[1] <== offset + i;
 
-            mux[i].nums[j] <== eq[j][i].out * in[j];   
+            mux[i].nums[j] <== eq[j][i].out * in[j];
         }
         out[i] <== mux[i].sum;
     }
@@ -53,14 +53,15 @@ Takes a base64url encoded JWT as byte sequence and calculates a SHA256 hash,
     as well as extracting public claims from the JWT payload.
 
     Construction Parameters:
-    - jwtLen:               Length of JWT input signal (header + '.' + payload), each element is 1 byte.
+    - jwtLen:               Length of JWT input (header + '.' + payload), assuming byte array.
+    - payOffset	            Offset of the payload in base64 decoded JWT, assuming byte array.
     - subLen:               Length of JWT subject claim.
     - issLen:               Length of JWT issuer claim.
     - nonceLen:             Length of JWT nonce claim.
     - audLen:               Length of JWT audience claim.
 
     Inputs:
-    - jwt[jwtLen]:          JWT byte sequence input, base64 encoded.
+    - jwt[jwtLen*8]:        JWT byte sequence input, base64 encoded and 1 bit each.
     - subOffset:            Offset of subject claim in the base64 decoded JWT string.
     - issOffset:            Offset of issuer claim in the base64 decoded JWT string.
     - nonceOffset:          Offset of nonce claim in the base64 decoded JWT string.
@@ -69,13 +70,14 @@ Takes a base64url encoded JWT as byte sequence and calculates a SHA256 hash,
     - expOffset:            Offset of exp(expires at) claim in the base64 decoded JWT string.
 
     Outputs:
-    - hash:                 SHA256 hash of header+'.'+payload, bit sequence
+    - hash[2]:              SHA256 hash of header+'.'+payload, 128 bits each
+                            (one signal cannot store 256 bits because Circom uses a 255 bit curve; the 256 bit hash can have different value after modulo)
     - hSub:                 uint256 Poseidon hash of subject claim
     - iss[issLen]:          issuer claim, byte sequence
-    - nonce[issLen]:        issuer claim, byte sequence
-    - aud[issLen]:          issuer claim, byte sequence
-    - iat[issLen]:          issuer claim, byte sequence
-    - exp[issLen]:          issuer claim, byte sequence
+    - nonce[nonceLen]:      nonce claim, byte sequence
+    - aud[audLen]:          audience claim, byte sequence
+    - iat[iatLen]:          issued at claim, byte sequence
+    - exp[expLen]:          expired at claim, byte sequence
 */
 template ZKVerifyJWT(jwtLen, payOffset, subLen, issLen, nonceLen, audLen) {
     // 76 + 1 + 218 bytes = 295
@@ -85,10 +87,7 @@ template ZKVerifyJWT(jwtLen, payOffset, subLen, issLen, nonceLen, audLen) {
     var base64OutputLen = 3*(jwtLen - payOffset)\4; // 163
     var base64InputLen = 4*((base64OutputLen+2)\3); // 220
 
-    // ASCII code (0x2e) for dot (.)
-    var dot2bit[8] = [0, 0, 1, 0, 1, 1, 1, 0];
-
-    signal output hash[256];
+    signal output hash[2];
     //signal output hSub[256];
     signal output hSub1;
 
@@ -116,7 +115,15 @@ template ZKVerifyJWT(jwtLen, payOffset, subLen, issLen, nonceLen, audLen) {
     // First, get SHA256 hash of JWT
     component sha256 = Sha256(jwtLen*8);
     sha256.in <== jwt;
-    hash <== sha256.out;
+    //hash <== sha256.out;
+    component hashChunk1= Bits2Num(128);
+    component hashChunk2= Bits2Num(128);
+    for (var i = 0; i < 128; i++) {
+        hashChunk1.in[127 - i] <== sha256.out[i];
+        hashChunk2.in[127 - i] <== sha256.out[128 + i];
+    }
+    hash[0] <== hashChunk1.out;
+    hash[1] <== hashChunk2.out;
 
     // Then, base64 decode
     component base64 = Base64Decode(base64OutputLen);
@@ -164,7 +171,7 @@ template ZKVerifyJWT(jwtLen, payOffset, subLen, issLen, nonceLen, audLen) {
     expSlice.in <== decoded;
     expSlice.offset <== expOffset;
     exp <== expSlice.out;
-    
+
     signal sub[subLen];
     component subSlice = ArraySlice(base64OutputLen, subLen);
     subSlice.in <== decoded;
@@ -175,7 +182,7 @@ template ZKVerifyJWT(jwtLen, payOffset, subLen, issLen, nonceLen, audLen) {
     for (var i = 0; i < subLen; i++) {
         poseidon.inputs[i] <== sub[i];
     }
-    
+
     hSub1 <== poseidon.out;
 }
 
