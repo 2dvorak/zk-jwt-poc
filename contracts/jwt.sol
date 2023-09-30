@@ -4,38 +4,35 @@ pragma solidity ^0.8.0;
 import "./izkverify.sol";
 import "./rsa.sol";
 import "hardhat/console.sol";
-import "./JsmnSolLib.sol";
 
 contract JWT {
 
-    uint public constant NUMBER_OF_CLAIMS = 5;
-    string[] public CLAIM_NAMES = ["iss", "nonce", "aud", "iat", "exp"];
-    uint public constant PUB_SIGNAL_CLAIMS_LENGTH = 34 + 8 + 32 + 10 + 10;
+    uint public constant NUMBER_OF_CLAIMS = 3;
+    string[] public CLAIM_NAMES = ["iss", "nonce", "aud"];
+    uint public constant PUB_SIGNAL_CLAIMS_LENGTH = 2 + 1 + 2 + 1 + 1;
     uint public constant PUB_SIGNAL_JWT_HASH_LENGTH = 2;
     uint public constant PUB_SIGNAL_SUB_HASH_LENGTH = 1;
     uint public constant PUB_SIGNAL_LENGTH = PUB_SIGNAL_JWT_HASH_LENGTH + PUB_SIGNAL_SUB_HASH_LENGTH + PUB_SIGNAL_CLAIMS_LENGTH;
+    uint public constant NUM_BITS = 31;
     address public zkVerify;
     mapping (string => bytes) public claims;
     mapping (string => ClaimInfo) public claimInfo;
 
     struct ClaimInfo {
-        uint offset;
         uint len;
     }
 
-    constructor(address _zkVerify, string[] memory _claimNames, bytes[] memory _claimValues, uint[] memory _claimOffsets) {
+    constructor(address _zkVerify, string[] memory _claimNames, bytes[] memory _claimValues) {
         zkVerify = _zkVerify;
-        assert(_claimNames.length == NUMBER_OF_CLAIMS);
-        assert(_claimValues.length == NUMBER_OF_CLAIMS);
-        assert(_claimOffsets.length == NUMBER_OF_CLAIMS);
+        require(_claimNames.length == NUMBER_OF_CLAIMS, "number of claim names does not match");
+        require(_claimValues.length == NUMBER_OF_CLAIMS, "number of claim values does not match");
 
         uint claimsLen = 0;
         for (uint i = 0; i < NUMBER_OF_CLAIMS; i++) {
             claims[_claimNames[i]] = _claimValues[i];
-            claimInfo[_claimNames[i]] = ClaimInfo(_claimOffsets[i], _claimValues[i].length);
+            claimInfo[_claimNames[i]] = ClaimInfo(_claimValues[i].length);
             claimsLen += _claimValues[i].length;
         }
-        require(claimsLen == PUB_SIGNAL_CLAIMS_LENGTH, "claim lengths do not add up to known value");
     }
 
     // Dummy function to measure performance of ZK proof verification
@@ -96,7 +93,7 @@ contract JWT {
         require(RsaVerify.pkcs1Sha256(hash, sig, e, n), "signature verification failed");
 
         // 3. verify claims except subject ID
-        verifyClaims(extractClaimBytesFromPubSignal(_pubSignals));
+        verifyClaims(_pubSignals);
 
         // 4. verify subject ID
         // TODO: implement this
@@ -107,25 +104,32 @@ contract JWT {
         return true;
     }
 
-    function verifyClaims(bytes memory _data) internal view {
+    function verifyClaims(uint[PUB_SIGNAL_LENGTH] memory _data) internal view {
+        uint curOffset = PUB_SIGNAL_SUB_HASH_LENGTH + PUB_SIGNAL_JWT_HASH_LENGTH;
         for (uint8 i = 0; i < NUMBER_OF_CLAIMS; i++) {
-            uint offset = claimInfo[CLAIM_NAMES[i]].offset;
             uint len = claimInfo[CLAIM_NAMES[i]].len;
             bytes memory claim = new bytes(len);
-            for (uint j = 0; j < len; j++) {
-                claim[j] = _data[offset + j];
+            uint chunks = uint(len) / NUM_BITS;
+            bytes memory b;
+            uint x;
+            for (uint j = 0; j < chunks; j++) {
+                b = new bytes(32);
+                x = _data[curOffset + j];
+                assembly { mstore(add(b, 32), x) }
+                for (uint k = 0; k < NUM_BITS; k++) {
+                    claim[NUM_BITS*j + k] = b[1 + k];
+                }
             }
+            b = new bytes(32);
+            x = _data[curOffset + chunks];
+            uint8 lastChunkLen = uint8(len % NUM_BITS);
+            assembly { mstore(add(b, 32), x) }
+            for (uint k = 0; k < lastChunkLen; k++) {
+                claim[NUM_BITS*chunks + k] = b[32 - lastChunkLen + k];
+            }
+            curOffset += chunks + 1;
             require(keccak256(claim) == keccak256(claims[CLAIM_NAMES[i]]), "claim verification failed");
         }
-    }
-
-    function extractClaimBytesFromPubSignal(uint[PUB_SIGNAL_LENGTH] memory uintArray) public pure returns (bytes memory) {
-        bytes memory result = new bytes(PUB_SIGNAL_CLAIMS_LENGTH); // 32 bytes per uint
-
-        for (uint256 i = 0; i < PUB_SIGNAL_CLAIMS_LENGTH; i++) {
-            result[i] = bytes1(uint8(uintArray[PUB_SIGNAL_JWT_HASH_LENGTH + PUB_SIGNAL_SUB_HASH_LENGTH + i]));
-        }
-        return result;
     }
 
     function extractHashFromPubSignal(uint[PUB_SIGNAL_LENGTH] memory bits) public pure returns (bytes32) {

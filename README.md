@@ -22,6 +22,7 @@ $ npm install
 ```
 
 ## Build
+Run below commands to compile circuits using circom:
 ```
 $ mkdir build
 $ circom jwt.circom --r1cs --wasm -o ./build
@@ -47,18 +48,21 @@ The script includes the following steps:
 
 The output shows times took in each steps.
 ```
-Nothing to compile
-init time:  914
-zkey time:  58270
-wtns time:  560
-prove time:  4984
-verify time:  190
-sol time:  356
-compile time:  38
-deploy time:  1082
-ZK verify time:  1679
-(measure) dummy contract time:  34
-(measure) RSA verify only time:  171
+Successfully verified JWT!
+Summary:
+init time:  1
+zkey time:  60249
+wtns time:  582
+prove time:  4977
+verify time:  189
+sol time:  343
+compile time:  39
+deploy time:  1011
+ZK verify time:  1226
+(measure) dummy contract time:  10
+(measure) RSA verify only time:  74
+zkContract size: 2262
+result: true
 ```
 
 
@@ -66,4 +70,3 @@ ZK verify time:  1679
 - Verify Poseidon hash
 - Verify timestamps
 - Use oracles for JWKS and time
-- Contract size (currently, the generated code size (~34500) exceeds 24576 bytes)

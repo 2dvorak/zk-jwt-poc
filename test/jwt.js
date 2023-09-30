@@ -32,10 +32,34 @@ async function jwtProof(){
 
     // Sample JWT
     const jwt = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InBldmpiYS1welhGU0ZDcnRTYlg5SyJ9.eyJpc3MiOiJodHRwczovL2Rldi05aDQ3YWpjOS51cy5hdXRoMC5jb20vIiwic3ViIjoidHdpdHRlcnwzMzc4MzQxMiIsImF1ZCI6IlQxNWU2NDZiNHVoQXJ5eW9qNEdOUm9uNnpzNE1ySEZWIiwiaWF0IjoxNjM5MTczMDI4LCJleHAiOjE2MzkyMDkwMjgsIm5vbmNlIjoiNDQwMTdhODkifQ.Vg2Vv-NJXdCqLy_JF4ecEsU_NgaA3DXbjwPfqr-euuXc-WPeyF00yRDP6_PVCx9p8PAU48fCMfNAKEFemPpY5Trn8paeweFk6uWZWGR42vo6BShryLFGRdce0MfTEBdZVsYnx-PDFz5aRFYxNnZL8sv2DUJ4NQM_8Zmz2EI7sSV7_kHCoXz7UHIOAtN8_otxCRwvrR3xAJ9P-Qp43HhUqM0fiC4RC3YkVKHRARcWC4bdVLBpKa1BBs4cd2wQ_tzv15YHPEyy4ODZGSX_M9cic-95TcpvVSuymw3bGj6_a7EPxcs6BzZGWlBwsh2ltB6FcLsDuAxxCPIG39tZ3Arp6Q";
-    let jwtInput = Buffer.from(jwt.split('.').slice(0,2).join('.'));
-    jwtInput = buffer2BitArray(jwtInput);
+    const jwtInput = jwt.split('.')[0] + "." + jwt.split('.')[1];
+    //let jwtInput = Buffer.from(jwt.split('.').slice(0,2).join('.'));
+    //jwtInput = buffer2BitArray(jwtInput);
+    const numBits = 248;
+    
+    const jwtUintLen = Math.floor(jwtInput.length * 8 / numBits);
+    let jwtHexArr = [];
+    let jwtSlice;
+    let jwtHex;
+    for (let i = 0; i < jwtUintLen; i++) {
+        jwtSlice = jwtInput.slice(i * numBits / 8, (i + 1) * numBits / 8);
+        jwtHex = "";
+        for (let j = 0; j < jwtSlice.length; j++) {
+            jwtHex += jwtSlice.charCodeAt(j).toString(16).padStart(2, '0');
+        }
+        jwtHexArr[i] = jwtHex;
+    }
+    jwtSlice = jwtInput.slice(jwtUintLen * numBits / 8);
+    jwtHex = "";
+    for (let j = 0; j < jwtSlice.length; j++) {
+        jwtHex += jwtSlice.charCodeAt(j).toString(16).padStart(2, '0');
+    }
+    jwtHexArr.push(jwtHex);
+
+    const jwtUint = jwtHexArr.map(hex => BigInt("0x" + hex));
+
     const inputs = {
-        jwt: jwtInput,
+        jwt: jwtUint,
     };
     const decodedPayload = atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'));
     const sig = Buffer.from(jwt.split('.')[2], 'base64url');
@@ -67,7 +91,7 @@ async function jwtProof(){
     timestamps.push(new Date());
 
     // Calculate witness
-    printProgress("Calculating zkey...");
+    printProgress("Calculating witness...");
     await snark.wtns.calculate(inputs, path.join("build", "jwt_js", "jwt.wasm"), wtns);
 
     timestamps.push(new Date());
@@ -120,20 +144,15 @@ async function jwtProof(){
     });
 
     // Generate inputs for JWT verifier constructor
-    const claimNames = ["iss", "nonce", "aud", "iat", "exp"];
-    const claimLengths = [34, 8, 32, 10, 10];
-    const claimValues = [];
-    const claimOffsets = [];
+    const claimNames = ["iss", "nonce", "aud"];
+    const claimLengths = [34, 8, 32];
+    const claimValues = claimNames.map(name => Buffer.from(jwtObject[name]));
     for (let i = 0; i < claimNames.length; i++) {
-        let value = jwtObject[claimNames[i]];
-        if (typeof value != "string") value = value.toString();
-        claimValues.push(Buffer.from(value));
-        if (i == 0) claimOffsets.push(0);
-        else claimOffsets.push(claimLengths[i - 1] + claimOffsets[i - 1]);
+        //claimValues.push(Buffer.from(jwtObject[claimNames[i]]));
     }
 
     // Deploy JWT verifier contract
-    verifierContract = await VerifierFactory.deploy(zkContract.address, claimNames, claimValues, claimOffsets);
+    verifierContract = await VerifierFactory.deploy(zkContract.address, claimNames, claimValues);
 
     timestamps.push(new Date());
 
