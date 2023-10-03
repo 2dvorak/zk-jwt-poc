@@ -24,6 +24,29 @@ function printProgress(progress) {
     process.stdout.write(progress);
 }
 
+function str2UintArray(str, numBits) {
+    const oupLen = Math.floor(str.length * 8 / numBits);
+    let hexArr = [];
+    let chunk;
+    let chunkHex;
+    for (let i = 0; i < oupLen; i++) {
+        chunk = str.slice(i * numBits / 8, (i + 1) * numBits / 8);
+        chunkHex = "";
+        for (let j = 0; j < chunk.length; j++) {
+            chunkHex += chunk.charCodeAt(j).toString(16).padStart(2, '0');
+        }
+        hexArr[i] = chunkHex;
+    }
+    chunk = str.slice(oupLen * numBits / 8);
+    chunkHex = "";
+    for (let j = 0; j < chunk.length; j++) {
+        chunkHex += chunk.charCodeAt(j).toString(16).padStart(2, '0');
+    }
+    hexArr.push(chunkHex);
+
+    return hexArr.map(hex => BigInt("0x" + hex));
+}
+
 async function jwtProof(){
     // Timestamps to measure performance
     const timestamps = [];
@@ -33,40 +56,17 @@ async function jwtProof(){
     // Sample JWT
     const jwt = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InBldmpiYS1welhGU0ZDcnRTYlg5SyJ9.eyJpc3MiOiJodHRwczovL2Rldi05aDQ3YWpjOS51cy5hdXRoMC5jb20vIiwic3ViIjoidHdpdHRlcnwzMzc4MzQxMiIsImF1ZCI6IlQxNWU2NDZiNHVoQXJ5eW9qNEdOUm9uNnpzNE1ySEZWIiwiaWF0IjoxNjM5MTczMDI4LCJleHAiOjE2MzkyMDkwMjgsIm5vbmNlIjoiNDQwMTdhODkifQ.Vg2Vv-NJXdCqLy_JF4ecEsU_NgaA3DXbjwPfqr-euuXc-WPeyF00yRDP6_PVCx9p8PAU48fCMfNAKEFemPpY5Trn8paeweFk6uWZWGR42vo6BShryLFGRdce0MfTEBdZVsYnx-PDFz5aRFYxNnZL8sv2DUJ4NQM_8Zmz2EI7sSV7_kHCoXz7UHIOAtN8_otxCRwvrR3xAJ9P-Qp43HhUqM0fiC4RC3YkVKHRARcWC4bdVLBpKa1BBs4cd2wQ_tzv15YHPEyy4ODZGSX_M9cic-95TcpvVSuymw3bGj6_a7EPxcs6BzZGWlBwsh2ltB6FcLsDuAxxCPIG39tZ3Arp6Q";
     const jwtInput = jwt.split('.')[0] + "." + jwt.split('.')[1];
-    //let jwtInput = Buffer.from(jwt.split('.').slice(0,2).join('.'));
-    //jwtInput = buffer2BitArray(jwtInput);
     const numBits = 248;
-    
-    const jwtUintLen = Math.floor(jwtInput.length * 8 / numBits);
-    let jwtHexArr = [];
-    let jwtSlice;
-    let jwtHex;
-    for (let i = 0; i < jwtUintLen; i++) {
-        jwtSlice = jwtInput.slice(i * numBits / 8, (i + 1) * numBits / 8);
-        jwtHex = "";
-        for (let j = 0; j < jwtSlice.length; j++) {
-            jwtHex += jwtSlice.charCodeAt(j).toString(16).padStart(2, '0');
-        }
-        jwtHexArr[i] = jwtHex;
-    }
-    jwtSlice = jwtInput.slice(jwtUintLen * numBits / 8);
-    jwtHex = "";
-    for (let j = 0; j < jwtSlice.length; j++) {
-        jwtHex += jwtSlice.charCodeAt(j).toString(16).padStart(2, '0');
-    }
-    jwtHexArr.push(jwtHex);
-
-    const jwtUint = jwtHexArr.map(hex => BigInt("0x" + hex));
 
     const inputs = {
-        jwt: jwtUint,
+        jwt: str2UintArray(jwtInput, numBits),
     };
     const decodedPayload = atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'));
     const sig = Buffer.from(jwt.split('.')[2], 'base64url');
     const jwtObject = JSON.parse(decodedPayload);
 
-    // Claims to verify
-    const claims = ["sub", "iss", "iat", "exp", "nonce", "aud"];
+    // "sub" claim offset
+    const claims = ["sub"];
     claims.forEach(claim => {
         const claimPattern = new RegExp(`"${claim}"\\:\\s*`);
         const claimPatternQuote = new RegExp(`"${claim}"\\:\\s*"`);
@@ -77,6 +77,10 @@ async function jwtProof(){
         // Add input signals for ZK
         inputs[claim + "Offset"] = claimOffset + fieldNameLength;
     })
+
+    // Prepare masked JWT
+    const maskedPayload = decodedPayload.slice(0, inputs["subOffset"]) + "*".repeat(16) + decodedPayload.slice(inputs["subOffset"] + 16);
+    inputs["masked"] = str2UintArray(maskedPayload, numBits);
 
     const zkey_final = {type: "mem"};
     const wtns = {type: "mem"};
@@ -147,9 +151,6 @@ async function jwtProof(){
     const claimNames = ["iss", "nonce", "aud"];
     const claimLengths = [34, 8, 32];
     const claimValues = claimNames.map(name => Buffer.from(jwtObject[name]));
-    for (let i = 0; i < claimNames.length; i++) {
-        //claimValues.push(Buffer.from(jwtObject[claimNames[i]]));
-    }
 
     // Deploy JWT verifier contract
     verifierContract = await VerifierFactory.deploy(zkContract.address, claimNames, claimValues);
