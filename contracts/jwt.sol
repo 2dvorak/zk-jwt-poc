@@ -70,7 +70,7 @@ contract JWT {
     // SHA256(jwt) + Poseidon(sub) + iss + nonce + aud + iat + exp
     // bit array     one uint        byte array
     // 256           1               34    8       32    10    10
-    function verify(bytes memory sig, uint[2] calldata _pA, uint[2][2] calldata _pB, uint[2] calldata _pC, uint[PUB_SIGNAL_LENGTH] memory _pubSignals) public view returns (bool) {
+    function verify(bytes memory sig, uint[2] calldata _pA, uint[2][2] calldata _pB, uint[2] calldata _pC, uint[PUB_SIGNAL_LENGTH] memory _pubSignals) public returns (bool) {
         // 1. verify the ZK proof
         require(Verifier(zkVerify).verifyProof(_pA, _pB, _pC, _pubSignals), "ZK verify failed");
 

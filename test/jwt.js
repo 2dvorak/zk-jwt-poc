@@ -182,8 +182,11 @@ async function jwtProof(){
         console.log(timestamps_labels[i] + " time: ", timestamps[i + 1] - timestamps[i]);
     }
     console.log("zkContract size:", zkContract.deployTransaction.data.length /2);
+    console.log("verifierContract size:", verifierContract.deployTransaction.data.length /2);
+    let receipt = await result.wait();
+    console.log("gas used:", receipt.gasUsed);
 
-    return result;
+    return receipt.status == 1;
 }
 
 jwtProof().then(res => {
