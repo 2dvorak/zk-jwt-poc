@@ -36,7 +36,7 @@ async function jwtProof(){
     //let jwtInput = Buffer.from(jwt.split('.').slice(0,2).join('.'));
     //jwtInput = buffer2BitArray(jwtInput);
     const numBits = 248;
-    
+
     const jwtUintLen = Math.floor(jwtInput.length * 8 / numBits);
     let jwtHexArr = [];
     let jwtSlice;
@@ -181,8 +181,11 @@ async function jwtProof(){
         console.log(timestamps_labels[i] + " time: ", timestamps[i + 1] - timestamps[i]);
     }
     console.log("zkContract size:", zkContract.deployTransaction.data.length /2);
+    console.log("verifierContract size:", verifierContract.deployTransaction.data.length /2);
+    let receipt = await result.wait();
+    console.log("gas used:", receipt.gasUsed);
 
-    return result;
+    return receipt.status == 1;
 }
 
 jwtProof().then(res => {
