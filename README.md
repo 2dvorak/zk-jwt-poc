@@ -2,6 +2,39 @@
 
 Verify JWT (OIDC id\_token) in smart contract, however privacy preserved with the aids of ZK
 
+## Overview
+
+This repo's circuits mainly aim to show that:
+
+> ∃ sub : (JWT = sub + nonce + iss + aud) ∧ (H(JWT) = Hjwt) ∧ (H(sub) = Hsub)
+
+```
+Circuit() {
+    signal input sub; // private input
+
+    signal input nonce;
+    signal input iss;
+    signal input aud;
+
+    signal input hJwt;
+    signal input hSub;
+
+    signal output ok;
+
+    component hashJWT = HashJWT()(sub, nonce, iss, aud);
+    assert(Hjwt == hashJWT.hash);
+
+    component hashSub = Hash()(sub);
+    assert(Hsub == hashSub.hash);
+
+    output <== 1;
+}
+
+component main{public: [nonce, iss, aud, hJwt, hSub]} = Circuit();
+```
+
+Note that the actual implementation may differ.
+
 ## Prerequisites
 - [Node.js](https://nodejs.org/en/download) (tested with v16.19.1)
 - [Circom](https://docs.circom.io/getting-started/installation/)
