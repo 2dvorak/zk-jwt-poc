@@ -6,7 +6,7 @@ Verify JWT (OIDC id\_token) in smart contract, however privacy preserved with th
 
 This repo's circuits mainly aim to show that:
 
-> ∃ sub : (JWT = sub + nonce + iss + aud) ∧ (H(JWT) = Hjwt) ∧ (H(sub) = Hsub)
+> ∃ sub : (JWT = sub + nonce + iss + aud) ∧ (H(JWT) = Hjwt) ∧ (H(sub, salt) = Hsub)
 
 ```
 Circuit() {
@@ -19,13 +19,26 @@ Circuit() {
     signal input hJwt;
     signal input hSub;
 
+    signal input salt; // private input, optional
+
     signal output ok;
 
     component hashJWT = HashJWT()(sub, nonce, iss, aud);
     assert(Hjwt == hashJWT.hash);
 
-    component hashSub = Hash()(sub);
-    assert(Hsub == hashSub.hash);
+    if (salt) {
+        component hashSub = Hash()(sub, salt);
+        assert(Hsub == hashSub.hash);
+    } else {
+        var iter = 100;
+        component hashSub[iter];
+        signal interHash[iter];
+        for (var i = 0; i < iter; i++) {
+            hashSub[i] = Hash()(sub);
+            interhash <== hashSub[i].hash;
+        }
+        assert(Hsub == interHash[iter].hash);
+    }
 
     output <== 1;
 }
