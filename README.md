@@ -19,26 +19,15 @@ Circuit() {
     signal input hJwt;
     signal input hSub;
 
-    signal input salt; // private input, optional
+    signal input salt; // private input
 
     signal output ok;
 
     component hashJWT = HashJWT()(sub, nonce, iss, aud);
     assert(Hjwt == hashJWT.hash);
 
-    if (salt) {
-        component hashSub = Hash()(sub, salt);
-        assert(Hsub == hashSub.hash);
-    } else {
-        var iter = 100;
-        component hashSub[iter];
-        signal interHash[iter];
-        for (var i = 0; i < iter; i++) {
-            hashSub[i] = Hash()(sub);
-            interhash <== hashSub[i].hash;
-        }
-        assert(Hsub == interHash[iter].hash);
-    }
+    component hashSub = Hash()(sub, salt);
+    assert(Hsub == hashSub.hash);
 
     output <== 1;
 }
